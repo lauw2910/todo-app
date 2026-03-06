@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-export default function Groupes({ token, userId }) {
+export default function Groupes({ token, userId, userRole }) {
   const [groupes, setGroupes] = useState([]);
   const [sports, setSports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,6 +13,7 @@ export default function Groupes({ token, userId }) {
   const [form, setForm] = useState({ nom: "", description: "", sport_id: "", ville: "", prive: false });
   const [toast, setToast] = useState("");
   const messagesEndRef = useRef(null);
+  const isMobile = window.innerWidth <= 768;
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
@@ -79,6 +80,16 @@ export default function Groupes({ token, userId }) {
     if (groupeActif?.id === id) setGroupeActif(null);
   }
 
+  async function supprimerGroupe(id) {
+    if (!confirm("Supprimer ce groupe ? Cette action est irréversible.")) return;
+    const res = await fetch(`/api/groupes/${id}`, { method: "DELETE", headers });
+    if (res.ok) {
+      showToast("✅ Groupe supprimé");
+      fetchGroupes();
+      if (groupeActif?.id === id) setGroupeActif(null);
+    }
+  }
+
   async function envoyerMessage() {
     if (!newMessage.trim()) return;
     await fetch(`/api/groupes/${groupeActif.id}/messages`, {
@@ -110,48 +121,68 @@ export default function Groupes({ token, userId }) {
 
   if (groupeActif) {
     const estMembre = groupeActif.est_membre;
+    const isCreateur = groupeActif.createur_id === userId;
+    const canDelete = isCreateur || userRole === "admin";
+
     return (
       <div style={s.container} className="fade-in">
-        <div style={s.chatLayout}>
+        <div style={{...s.chatLayout, ...(isMobile ? s.chatLayoutMobile : {})}}>
           {/* Sidebar membres */}
-          <div style={s.membersSidebar}>
-            <button style={s.backBtn} onClick={() => setGroupeActif(null)}>← Retour</button>
-            <div style={s.groupeInfo}>
-              <div style={s.groupeIconBig}>{groupeActif.sport_icone}</div>
-              <h3 style={s.groupeNomBig}>{groupeActif.nom}</h3>
-              <p style={s.groupeVille}>📍 {groupeActif.ville || "Partout"}</p>
-              {groupeActif.description && <p style={s.groupeDesc}>{groupeActif.description}</p>}
-            </div>
-            <div style={s.membresTitle}>👥 {membres.length} membre{membres.length > 1 ? "s" : ""}</div>
-            <div style={s.membresList}>
-              {membres.map(m => (
-                <div key={m.id} style={s.membreItem}>
-                  <div style={s.membreAvatar}>
-                    {m.photo
-                      ? <img src={m.photo} style={s.membreAvatarImg} alt="" />
-                      : `${m.prenom?.[0]}${m.nom?.[0]}`
-                    }
+          {!isMobile && (
+            <div style={s.membersSidebar}>
+              <button style={s.backBtn} onClick={() => setGroupeActif(null)}>← Retour</button>
+              <div style={s.groupeInfo}>
+                <div style={s.groupeIconBig}>{groupeActif.sport_icone}</div>
+                <h3 style={s.groupeNomBig}>{groupeActif.nom}</h3>
+                <p style={s.groupeVille}>📍 {groupeActif.ville || "Partout"}</p>
+                {groupeActif.description && <p style={s.groupeDesc}>{groupeActif.description}</p>}
+              </div>
+              <div style={s.membresTitle}>👥 {membres.length} membre{membres.length > 1 ? "s" : ""}</div>
+              <div style={s.membresList}>
+                {membres.map(m => (
+                  <div key={m.id} style={s.membreItem}>
+                    <div style={s.membreAvatar}>
+                      {m.photo
+                        ? <img src={m.photo} style={s.membreAvatarImg} alt="" />
+                        : `${m.prenom?.[0]}${m.nom?.[0]}`
+                      }
+                    </div>
+                    <div>
+                      <div style={s.membreNom}>{m.prenom} {m.nom}</div>
+                      {m.role === "admin" && <span style={s.adminBadge}>👑 Admin</span>}
+                    </div>
                   </div>
-                  <div>
-                    <div style={s.membreNom}>{m.prenom} {m.nom}</div>
-                    {m.role === "admin" && <span style={s.adminBadge}>👑 Admin</span>}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              {estMembre && !isCreateur && (
+                <button style={s.quitterBtn} onClick={() => quitter(groupeActif.id)}>
+                  Quitter le groupe
+                </button>
+              )}
+              {canDelete && (
+                <button style={s.deleteBtn} onClick={() => supprimerGroupe(groupeActif.id)}>
+                  🗑️ Supprimer le groupe
+                </button>
+              )}
             </div>
-            {estMembre && (
-              <button style={s.quitterBtn} onClick={() => quitter(groupeActif.id)}>
-                Quitter le groupe
-              </button>
-            )}
-          </div>
+          )}
 
           {/* Chat */}
-          <div style={s.chatMain}>
+          <div style={{...s.chatMain, ...(isMobile ? s.chatMainMobile : {})}}>
             <div style={s.chatHeader}>
-              <span style={s.chatTitle}>💬 Chat — {groupeActif.nom}</span>
+              {isMobile && (
+                <button style={s.backBtnSmall} onClick={() => setGroupeActif(null)}>←</button>
+              )}
+              <span style={s.chatTitle}>
+                {groupeActif.sport_icone} {groupeActif.nom}
+              </span>
+              <span style={s.chatMembres}>👥 {membres.length}</span>
+              {isMobile && canDelete && (
+                <button style={s.deleteBtnSmall} onClick={() => supprimerGroupe(groupeActif.id)}>🗑️</button>
+              )}
             </div>
-            <div style={s.chatMessages}>
+
+            <div style={{...s.chatMessages, ...(isMobile ? s.chatMessagesMobile : {})}}>
               {messages.length === 0 && (
                 <div style={s.chatEmpty}>Soyez le premier à écrire un message !</div>
               )}
@@ -181,8 +212,9 @@ export default function Groupes({ token, userId }) {
               })}
               <div ref={messagesEndRef}/>
             </div>
+
             {estMembre ? (
-              <div style={s.chatInput}>
+              <div style={{...s.chatInput, ...(isMobile ? s.chatInputMobile : {})}}>
                 <input style={s.chatInputField}
                   placeholder="Écrire un message..."
                   value={newMessage}
@@ -191,7 +223,7 @@ export default function Groupes({ token, userId }) {
                 <button style={s.chatSendBtn} onClick={envoyerMessage}>➤</button>
               </div>
             ) : (
-              <div style={s.joinPrompt}>
+              <div style={{...s.joinPrompt, ...(isMobile ? s.chatInputMobile : {})}}>
                 <button style={s.joinBtn} onClick={() => rejoindre(groupeActif.id)}>
                   👥 Rejoindre pour participer au chat
                 </button>
@@ -217,7 +249,6 @@ export default function Groupes({ token, userId }) {
         </button>
       </div>
 
-      {/* Modal créer */}
       {showCreate && (
         <div style={s.overlay} onClick={() => setShowCreate(false)}>
           <div style={s.modal} onClick={e => e.stopPropagation()} className="fade-in">
@@ -262,7 +293,6 @@ export default function Groupes({ token, userId }) {
         </div>
       )}
 
-      {/* Onglets */}
       <div style={s.tabs}>
         <button style={{...s.tab, ...(onglet === "tous" ? s.tabActive : {})}}
           onClick={() => setOnglet("tous")}>
@@ -288,39 +318,50 @@ export default function Groupes({ token, userId }) {
         </div>
       ) : (
         <div style={s.grid}>
-          {groupesFiltres.map(groupe => (
-            <div key={groupe.id} style={s.card}>
-              <div style={s.cardTop}>
-                <div style={s.sportIcon}>{groupe.sport_icone}</div>
-                <div style={s.cardBadges}>
-                  {groupe.prive && <span style={s.priveBadge}>🔒 Privé</span>}
-                  {groupe.est_membre && <span style={s.membreBadge}>✓ Membre</span>}
+          {groupesFiltres.map(groupe => {
+            const isCreateur = groupe.createur_id === userId;
+            const canDelete = isCreateur || userRole === "admin";
+            return (
+              <div key={groupe.id} style={s.card}>
+                <div style={s.cardTop}>
+                  <div style={s.sportIcon}>{groupe.sport_icone}</div>
+                  <div style={s.cardBadges}>
+                    {groupe.prive && <span style={s.priveBadge}>🔒 Privé</span>}
+                    {isCreateur && <span style={s.createurBadge}>👑 Créateur</span>}
+                    {groupe.est_membre && !isCreateur && <span style={s.membreBadge}>✓ Membre</span>}
+                  </div>
+                </div>
+                <h3 style={s.cardNom}>{groupe.nom}</h3>
+                <div style={s.cardInfos}>
+                  <span style={s.cardInfo}>🏅 {groupe.sport_nom}</span>
+                  {groupe.ville && <span style={s.cardInfo}>📍 {groupe.ville}</span>}
+                  <span style={s.cardInfo}>👥 {groupe.nb_membres} membre{groupe.nb_membres > 1 ? "s" : ""}</span>
+                </div>
+                {groupe.description && <p style={s.cardDesc}>{groupe.description}</p>}
+                <p style={s.cardCreateur}>Créé par {groupe.createur}</p>
+                <div style={s.cardBtns}>
+                  <button style={s.chatBtn} onClick={() => setGroupeActif(groupe)}>
+                    💬 Chat
+                  </button>
+                  {groupe.est_membre && !isCreateur && (
+                    <button style={s.quitterCardBtn} onClick={() => quitter(groupe.id)}>
+                      Quitter
+                    </button>
+                  )}
+                  {!groupe.est_membre && !isCreateur && (
+                    <button style={s.rejoindreBtn} onClick={() => rejoindre(groupe.id)}>
+                      + Rejoindre
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button style={s.deleteCardBtn} onClick={() => supprimerGroupe(groupe.id)}>
+                      🗑️
+                    </button>
+                  )}
                 </div>
               </div>
-              <h3 style={s.cardNom}>{groupe.nom}</h3>
-              <div style={s.cardInfos}>
-                <span style={s.cardInfo}>🏅 {groupe.sport_nom}</span>
-                {groupe.ville && <span style={s.cardInfo}>📍 {groupe.ville}</span>}
-                <span style={s.cardInfo}>👥 {groupe.nb_membres} membre{groupe.nb_membres > 1 ? "s" : ""}</span>
-              </div>
-              {groupe.description && <p style={s.cardDesc}>{groupe.description}</p>}
-              <p style={s.cardCreateur}>Créé par {groupe.createur}</p>
-              <div style={s.cardBtns}>
-                <button style={s.chatBtn} onClick={() => setGroupeActif(groupe)}>
-                  💬 Chat
-                </button>
-                {groupe.est_membre ? (
-                  <button style={s.quitterCardBtn} onClick={() => quitter(groupe.id)}>
-                    Quitter
-                  </button>
-                ) : (
-                  <button style={s.rejoindreBtn} onClick={() => rejoindre(groupe.id)}>
-                    + Rejoindre
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -425,8 +466,12 @@ const s = {
   },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" },
   sportIcon: { fontSize: "2.5rem" },
-  cardBadges: { display: "flex", gap: "0.4rem" },
+  cardBadges: { display: "flex", gap: "0.4rem", flexWrap: "wrap" },
   priveBadge: {
+    background: "rgba(255,179,0,0.1)", color: "#FFB300",
+    padding: "0.2rem 0.6rem", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700",
+  },
+  createurBadge: {
     background: "rgba(255,179,0,0.1)", color: "#FFB300",
     padding: "0.2rem 0.6rem", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700",
   },
@@ -461,9 +506,15 @@ const s = {
     borderRadius: "10px", color: "#FF3D57", fontSize: "0.85rem",
     fontWeight: "700", cursor: "pointer",
   },
-
+  deleteCardBtn: {
+    padding: "0.7rem 0.9rem",
+    background: "rgba(255,61,87,0.1)", border: "1px solid rgba(255,61,87,0.3)",
+    borderRadius: "10px", color: "#FF3D57", fontSize: "0.9rem",
+    cursor: "pointer",
+  },
   // Chat layout
   chatLayout: { display: "flex", gap: "1.5rem", height: "calc(100vh - 120px)" },
+  chatLayoutMobile: { height: "calc(100vh - 60px)", flexDirection: "column" },
   membersSidebar: {
     width: "260px", background: "var(--dark3)", borderRadius: "16px",
     padding: "1.25rem", border: "1px solid rgba(255,255,255,0.05)",
@@ -473,6 +524,17 @@ const s = {
     background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
     color: "var(--text2)", padding: "0.5rem 1rem", borderRadius: "8px",
     cursor: "pointer", fontWeight: "600", fontSize: "0.85rem",
+  },
+  backBtnSmall: {
+    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+    color: "white", width: "36px", height: "36px", borderRadius: "50%",
+    cursor: "pointer", fontSize: "1rem", display: "flex",
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  deleteBtnSmall: {
+    background: "rgba(255,61,87,0.1)", border: "1px solid rgba(255,61,87,0.3)",
+    color: "#FF3D57", padding: "0.4rem 0.6rem", borderRadius: "8px",
+    cursor: "pointer", fontSize: "0.85rem", marginLeft: "auto",
   },
   groupeInfo: { textAlign: "center", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.05)" },
   groupeIconBig: { fontSize: "3rem", marginBottom: "0.5rem" },
@@ -502,17 +564,29 @@ const s = {
     border: "1px solid rgba(255,61,87,0.3)", borderRadius: "10px",
     color: "#FF3D57", cursor: "pointer", fontWeight: "700", fontSize: "0.85rem",
   },
+  deleteBtn: {
+    padding: "0.65rem", background: "rgba(255,61,87,0.1)",
+    border: "1px solid rgba(255,61,87,0.3)", borderRadius: "10px",
+    color: "#FF3D57", cursor: "pointer", fontWeight: "700", fontSize: "0.85rem",
+  },
   chatMain: {
     flex: 1, background: "var(--dark3)", borderRadius: "16px",
     border: "1px solid rgba(255,255,255,0.05)",
     display: "flex", flexDirection: "column", overflow: "hidden",
   },
+  chatMainMobile: {
+    position: "fixed", inset: 0, zIndex: 50,
+    background: "var(--dark)", borderRadius: 0,
+  },
   chatHeader: {
     padding: "1rem 1.5rem", borderBottom: "1px solid rgba(255,255,255,0.05)",
-    background: "var(--dark4)",
+    background: "var(--dark4)", display: "flex", alignItems: "center", gap: "0.75rem",
+    flexShrink: 0,
   },
-  chatTitle: { color: "white", fontWeight: "700", fontSize: "1rem" },
+  chatTitle: { color: "white", fontWeight: "700", fontSize: "1rem", flex: 1 },
+  chatMembres: { color: "var(--text2)", fontSize: "0.85rem" },
   chatMessages: { flex: 1, overflowY: "auto", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" },
+  chatMessagesMobile: { paddingBottom: "1rem" },
   chatEmpty: { textAlign: "center", color: "var(--text2)", padding: "3rem", fontSize: "0.9rem" },
   dateSep: {
     textAlign: "center", color: "var(--text2)", fontSize: "0.75rem",
@@ -536,14 +610,20 @@ const s = {
     background: "rgba(0,87,255,0.3)", borderRadius: "16px 16px 4px 16px",
   },
   msgAuthor: { color: "var(--cyan)", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.25rem" },
-  msgText: { color: "white", fontSize: "0.9rem", lineHeight: "1.5" },
+  msgText: { color: "white", fontSize: "0.9rem", lineHeight: "1.5", margin: 0 },
   msgTime: { color: "var(--text2)", fontSize: "0.7rem", display: "block", marginTop: "0.25rem" },
   chatInput: {
     display: "flex", gap: "0.5rem", padding: "1rem",
     borderTop: "1px solid rgba(255,255,255,0.05)",
+    background: "var(--dark4)", flexShrink: 0,
+  },
+  chatInputMobile: {
+    padding: "0.75rem 1rem",
+    paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))",
+    position: "sticky", bottom: 0,
   },
   chatInputField: {
-    flex: 1, padding: "0.85rem 1rem", background: "var(--dark4)",
+    flex: 1, padding: "0.85rem 1rem", background: "var(--dark3)",
     border: "2px solid transparent", borderRadius: "12px",
     color: "white", fontSize: "0.9rem", outline: "none",
   },
@@ -553,7 +633,7 @@ const s = {
     color: "white", border: "none", borderRadius: "12px",
     fontWeight: "700", cursor: "pointer", fontSize: "1rem",
   },
-  joinPrompt: { padding: "1rem", borderTop: "1px solid rgba(255,255,255,0.05)" },
+  joinPrompt: { padding: "1rem", borderTop: "1px solid rgba(255,255,255,0.05)", background: "var(--dark4)", flexShrink: 0 },
   joinBtn: {
     width: "100%", padding: "0.85rem",
     background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)",

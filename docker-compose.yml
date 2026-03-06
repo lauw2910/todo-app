@@ -20,7 +20,7 @@ services:
       SMTP_PASS: htdvbroxczzzdjno
       APP_URL: sportconnect.duckdns.org
       GOOGLE_CLIENT_ID: secret
-      GOOGLE_CLIENT_SECRET: secret
+      GOOGLE_CLIENT_SECRET: scret
     depends_on:
       - db
     restart: always

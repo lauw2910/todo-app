@@ -1,16 +1,29 @@
 import { useState, useEffect } from "react";
 
 export default function Admin({ token }) {
+  const [onglet, setOnglet] = useState("stats");
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
-  const [onglet, setOnglet] = useState("stats");
+  const [evenements, setEvenements] = useState([]);
+  const [evenementActif, setEvenementActif] = useState(null);
+  const [participants, setParticipants] = useState([]);
+  const [toast, setToast] = useState("");
 
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  useEffect(() => {
+    if (onglet === "users") fetchUsers();
+    if (onglet === "evenements") fetchEvenements();
+  }, [onglet]);
+
+  useEffect(() => {
+    if (!evenementActif) return;
+    fetchParticipants(evenementActif.id);
+  }, [evenementActif]);
 
   async function fetchStats() {
     const res = await fetch("/api/admin/stats", { headers });
@@ -22,170 +35,298 @@ export default function Admin({ token }) {
     const res = await fetch("/api/admin/users", { headers });
     const data = await res.json();
     setUsers(Array.isArray(data) ? data : []);
-    setLoading(false);
   }
 
-  async function deleteUser(id, nom) {
-    if (!confirm(`Supprimer ${nom} ?`)) return;
-    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", headers });
+  async function fetchEvenements() {
+    const res = await fetch("/api/admin/evenements", { headers });
     const data = await res.json();
-    if (res.ok) {
-      showMsg("✅ Utilisateur supprimé");
-      fetchUsers();
-      fetchStats();
-    } else {
-      showMsg("❌ " + data.error);
-    }
+    setEvenements(Array.isArray(data) ? data : []);
   }
 
-  async function toggleRole(id, roleActuel) {
-    const newRole = roleActuel === "admin" ? "user" : "admin";
-    await fetch(`/api/admin/users/${id}/role`, {
-      method: "PUT", headers,
-      body: JSON.stringify({ role: newRole }),
-    });
-    showMsg(`✅ Rôle mis à jour → ${newRole}`);
+  async function fetchParticipants(id) {
+    const res = await fetch(`/api/admin/evenements/${id}/participants`, { headers });
+    const data = await res.json();
+    setParticipants(Array.isArray(data) ? data : []);
+  }
+
+  async function supprimerUser(id) {
+    if (!confirm("Supprimer cet utilisateur ?")) return;
+    await fetch(`/api/admin/users/${id}`, { method: "DELETE", headers });
+    showToast("✅ Utilisateur supprimé");
     fetchUsers();
-  }
-
-  function showMsg(msg) {
-    setMessage(msg);
-    setTimeout(() => setMessage(""), 3000);
-  }
-
-  useEffect(() => {
     fetchStats();
+  }
+
+  async function changerRole(id, role) {
+    await fetch(`/api/admin/users/${id}/role`, {
+      method: "PUT", headers, body: JSON.stringify({ role }),
+    });
+    showToast(`✅ Rôle mis à jour : ${role}`);
     fetchUsers();
-  }, []);
+  }
+
+  async function supprimerEvenement(id) {
+    if (!confirm("Supprimer cet événement ?")) return;
+    await fetch(`/api/admin/evenements/${id}`, { method: "DELETE", headers });
+    showToast("✅ Événement supprimé");
+    fetchEvenements();
+    fetchStats();
+    if (evenementActif?.id === id) setEvenementActif(null);
+  }
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3000);
+  }
 
   function formatDate(d) {
-    return new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+    return new Date(d).toLocaleDateString("fr-FR", {
+      day: "numeric", month: "short", year: "numeric",
+    });
   }
 
-  const statCards = stats ? [
-    { label: "Utilisateurs", value: stats.users, icon: "👥", color: "#0057FF" },
-    { label: "Sports joués", value: stats.sports, icon: "🏅", color: "#00E5FF" },
-    { label: "Événements", value: stats.evenements, icon: "📅", color: "#00E676" },
-    { label: "Messages", value: stats.messages, icon: "💬", color: "#FFB300" },
-    { label: "Évaluations", value: stats.evaluations, icon: "⭐", color: "#FF3D57" },
-    { label: "Note moyenne", value: stats.note_moyenne + "/5", icon: "📊", color: "#9C27B0" },
-  ] : [];
+  const niveauColors = {
+    debutant: "#00E676", intermediaire: "#0057FF", avance: "#FFB300", expert: "#FF3D57"
+  };
+
+  // Vue participants événement
+  if (evenementActif) {
+    return (
+      <div style={s.container} className="fade-in">
+        {toast && <div style={s.toast}>{toast}</div>}
+        <button style={s.backBtn} onClick={() => setEvenementActif(null)}>← Retour</button>
+
+        <div style={s.eventHeader}>
+          <div style={s.eventIcon}>{evenementActif.sport_icone}</div>
+          <div>
+            <h2 style={s.eventTitre}>{evenementActif.titre}</h2>
+            <div style={s.eventMeta}>
+              <span>📅 {formatDate(evenementActif.date_evenement)}</span>
+              <span>📍 {evenementActif.ville}</span>
+              <span>👤 {evenementActif.organisateur}</span>
+              <span>✉️ {evenementActif.organisateur_email}</span>
+            </div>
+          </div>
+          <button style={s.deleteEventBtn} onClick={() => supprimerEvenement(evenementActif.id)}>
+            🗑️ Supprimer l'événement
+          </button>
+        </div>
+
+        <div style={s.card}>
+          <h3 style={s.cardTitle}>
+            👥 Participants ({participants.length} / {evenementActif.nb_places})
+          </h3>
+          {participants.length === 0 ? (
+            <p style={s.emptyText}>Aucun participant</p>
+          ) : (
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {["Avatar", "Nom", "Email", "Ville", "Niveau", "Statut", "Inscrit le"].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {participants.map(p => (
+                  <tr key={p.id} style={s.tr}>
+                    <td style={s.td}>
+                      <div style={s.avatar}>
+                        {p.photo
+                          ? <img src={p.photo} style={s.avatarImg} alt="" />
+                          : `${p.prenom?.[0] || "?"}${p.nom?.[0] || ""}`
+                        }
+                      </div>
+                    </td>
+                    <td style={s.td}>
+                      <div style={s.userName}>
+                        {p.prenom || "—"} {p.nom || "—"}
+                      </div>
+                    </td>
+                    <td style={s.td}><span style={s.email}>{p.email}</span></td>
+                    <td style={s.td}><span style={s.meta}>{p.ville || "—"}</span></td>
+                    <td style={s.td}>
+                      <span style={{...s.niveauBadge, color: niveauColors[p.niveau] || "var(--text2)"}}>
+                        {p.niveau || "—"}
+                      </span>
+                    </td>
+                    <td style={s.td}>
+                      <span style={{
+                        ...s.statutBadge,
+                        background: p.statut === "accepte" ? "rgba(0,230,118,0.1)" : p.statut === "en_attente" ? "rgba(255,179,0,0.1)" : "rgba(255,61,87,0.1)",
+                        color: p.statut === "accepte" ? "#00E676" : p.statut === "en_attente" ? "#FFB300" : "#FF3D57",
+                      }}>
+                        {p.statut === "accepte" ? "✅ Accepté" : p.statut === "en_attente" ? "⏳ En attente" : "❌ Refusé"}
+                      </span>
+                    </td>
+                    <td style={s.td}><span style={s.meta}>{formatDate(p.joined_at)}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={s.container} className="fade-in">
+      {toast && <div style={s.toast}>{toast}</div>}
+
       <div style={s.pageHeader}>
-        <div>
-          <div style={s.adminBadge}>🔒 ADMIN</div>
-          <h1 style={s.pageTitle}>Tableau de bord admin</h1>
-          <p style={s.pageDesc}>Gestion complète de SportConnect</p>
-        </div>
+        <h1 style={s.pageTitle}>🔒 Administration</h1>
+        <p style={s.pageDesc}>Gestion complète de SportConnect</p>
       </div>
 
-      {message && <div style={s.toast}>{message}</div>}
-
-      {/* Onglets */}
       <div style={s.tabs}>
-        <button style={{...s.tab, ...(onglet === "stats" ? s.tabActive : {})}}
-          onClick={() => setOnglet("stats")}>
-          📊 Statistiques
-        </button>
-        <button style={{...s.tab, ...(onglet === "users" ? s.tabActive : {})}}
-          onClick={() => setOnglet("users")}>
-          👥 Utilisateurs
-          <span style={s.tabBadge}>{users.length}</span>
-        </button>
+        {[
+          { id: "stats", label: "📊 Statistiques" },
+          { id: "users", label: "👤 Utilisateurs" },
+          { id: "evenements", label: "📅 Événements" },
+        ].map(t => (
+          <button key={t.id}
+            style={{...s.tab, ...(onglet === t.id ? s.tabActive : {})}}
+            onClick={() => setOnglet(t.id)}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* Stats */}
-      {onglet === "stats" && (
-        <div className="fade-in">
-          <div style={s.statsGrid}>
-            {statCards.map(card => (
-              <div key={card.label} style={s.statCard}>
-                <div style={{...s.statIcon, background: card.color + "20", color: card.color}}>
-                  {card.icon}
-                </div>
-                <div style={{...s.statValue, color: card.color}}>{card.value}</div>
-                <div style={s.statLabel}>{card.label}</div>
+      {onglet === "stats" && stats && (
+        <div style={s.statsGrid}>
+          {[
+            { label: "Utilisateurs", value: stats.users, icon: "👤", color: "#0057FF" },
+            { label: "Sports joués", value: stats.sports, icon: "🏅", color: "#00E5FF" },
+            { label: "Événements", value: stats.evenements, icon: "📅", color: "#FFB300" },
+            { label: "Groupes", value: stats.groupes, icon: "👥", color: "#00E676" },
+            { label: "Messages", value: stats.messages, icon: "💬", color: "#FF3D57" },
+            { label: "Évaluations", value: stats.evaluations, icon: "⭐", color: "#FFB300" },
+            { label: "Note moyenne", value: stats.note_moyenne ? `${stats.note_moyenne}/5` : "—", icon: "🏆", color: "#00E676" },
+          ].map(stat => (
+            <div key={stat.label} style={s.statCard}>
+              <div style={{...s.statIcon, background: stat.color + "20", color: stat.color}}>
+                {stat.icon}
               </div>
-            ))}
-          </div>
+              <div style={s.statValue}>{stat.value}</div>
+              <div style={s.statLabel}>{stat.label}</div>
+            </div>
+          ))}
         </div>
       )}
 
       {/* Users */}
       {onglet === "users" && (
-        <div className="fade-in">
-          {loading ? (
-            <div style={s.loading}>
-              <div style={s.spinner}/>
-              <p style={{color: "var(--text2)"}}>Chargement...</p>
-            </div>
-          ) : (
-            <div style={s.table}>
-              <div style={s.tableHeader}>
-                <div style={{...s.th, flex: 2}}>Utilisateur</div>
-                <div style={s.th}>Ville</div>
-                <div style={s.th}>Niveau</div>
-                <div style={s.th}>Sports</div>
-                <div style={s.th}>Messages</div>
-                <div style={s.th}>Inscrit le</div>
-                <div style={s.th}>Rôle</div>
-                <div style={s.th}>Actions</div>
-              </div>
+        <div style={s.card}>
+          <h3 style={s.cardTitle}>👤 Tous les utilisateurs ({users.length})</h3>
+          <div style={s.tableWrapper}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {["Avatar", "Nom", "Email", "Ville", "Niveau", "Sports", "Messages", "Inscrit le", "Rôle", "Actions"].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id} style={s.tr}>
+                    <td style={s.td}>
+                      <div style={s.avatar}>
+                        {u.photo
+                          ? <img src={u.photo} style={s.avatarImg} alt="" />
+                          : `${u.prenom?.[0] || "?"}${u.nom?.[0] || ""}`
+                        }
+                      </div>
+                    </td>
+                    <td style={s.td}>
+                      <div style={s.userName}>{u.prenom || "—"} {u.nom || "—"}</div>
+                    </td>
+                    <td style={s.td}><span style={s.email}>{u.email}</span></td>
+                    <td style={s.td}><span style={s.meta}>{u.ville || "—"}</span></td>
+                    <td style={s.td}>
+                      <span style={{...s.niveauBadge, color: niveauColors[u.niveau] || "var(--text2)"}}>
+                        {u.niveau || "—"}
+                      </span>
+                    </td>
+                    <td style={s.td}><span style={s.meta}>{u.nb_sports}</span></td>
+                    <td style={s.td}><span style={s.meta}>{u.nb_messages}</span></td>
+                    <td style={s.td}><span style={s.meta}>{formatDate(u.created_at)}</span></td>
+                    <td style={s.td}>
+                      <span style={u.role === "admin" ? s.adminBadge : s.userBadge}>
+                        {u.role === "admin" ? "👑 Admin" : "👤 User"}
+                      </span>
+                    </td>
+                    <td style={s.td}>
+                      <div style={s.actions}>
+                        <button style={s.roleBtn}
+                          onClick={() => changerRole(u.id, u.role === "admin" ? "user" : "admin")}>
+                          {u.role === "admin" ? "⬇️" : "👑"}
+                        </button>
+                        <button style={s.deleteBtn} onClick={() => supprimerUser(u.id)}>
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-              {users.map(user => (
-                <div key={user.id} style={s.tableRow}>
-                  <div style={{...s.td, flex: 2}}>
-                    <div style={s.userCell}>
-                      <div style={s.userAvatar}>
-                        {user.prenom?.[0]?.toUpperCase()}{user.nom?.[0]?.toUpperCase()}
-                      </div>
+      {/* Événements */}
+      {onglet === "evenements" && (
+        <div style={s.card}>
+          <h3 style={s.cardTitle}>📅 Tous les événements ({evenements.length})</h3>
+          <div style={s.tableWrapper}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {["Sport", "Titre", "Organisateur", "Ville", "Date", "Participants", "Actions"].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {evenements.map(e => (
+                  <tr key={e.id} style={s.tr}>
+                    <td style={s.td}>
+                      <span style={s.sportIcon}>{e.sport_icone} {e.sport_nom}</span>
+                    </td>
+                    <td style={s.td}>
+                      <div style={s.userName}>{e.titre}</div>
+                    </td>
+                    <td style={s.td}>
                       <div>
-                        <div style={s.userName}>{user.prenom} {user.nom}</div>
-                        <div style={s.userEmail}>{user.email}</div>
+                        <div style={s.userName}>{e.organisateur}</div>
+                        <div style={s.email}>{e.organisateur_email}</div>
                       </div>
-                    </div>
-                  </div>
-                  <div style={s.td}>{user.ville || "—"}</div>
-                  <div style={s.td}>
-                    <span style={{
-                      ...s.niveauBadge,
-                      background: {
-                        debutant: "rgba(0,230,118,0.1)", intermediaire: "rgba(0,87,255,0.1)",
-                        avance: "rgba(255,179,0,0.1)", expert: "rgba(255,61,87,0.1)"
-                      }[user.niveau] || "rgba(255,255,255,0.05)",
-                      color: {
-                        debutant: "#00E676", intermediaire: "#0057FF",
-                        avance: "#FFB300", expert: "#FF3D57"
-                      }[user.niveau] || "white",
-                    }}>{user.niveau}</span>
-                  </div>
-                  <div style={s.td}>{user.nb_sports}</div>
-                  <div style={s.td}>{user.nb_messages}</div>
-                  <div style={s.td}>{formatDate(user.created_at)}</div>
-                  <div style={s.td}>
-                    <span style={{
-                      ...s.roleBadge,
-                      background: user.role === "admin" ? "rgba(255,61,87,0.15)" : "rgba(255,255,255,0.05)",
-                      color: user.role === "admin" ? "#FF3D57" : "var(--text2)",
-                    }}>
-                      {user.role === "admin" ? "👑 Admin" : "👤 User"}
-                    </span>
-                  </div>
-                  <div style={{...s.td, display: "flex", gap: "0.4rem"}}>
-                    <button style={s.roleBtn} onClick={() => toggleRole(user.id, user.role)}
-                      title={user.role === "admin" ? "Rétrograder" : "Promouvoir admin"}>
-                      {user.role === "admin" ? "⬇️" : "👑"}
-                    </button>
-                    <button style={s.deleteBtn} onClick={() => deleteUser(user.id, `${user.prenom} ${user.nom}`)}>
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                    </td>
+                    <td style={s.td}><span style={s.meta}>{e.ville || "—"}</span></td>
+                    <td style={s.td}><span style={s.meta}>{formatDate(e.date_evenement)}</span></td>
+                    <td style={s.td}>
+                      <span style={{...s.meta, color: parseInt(e.nb_participants) >= parseInt(e.nb_places) ? "#FF3D57" : "#00E676"}}>
+                        {e.nb_participants}/{e.nb_places}
+                      </span>
+                    </td>
+                    <td style={s.td}>
+                      <div style={s.actions}>
+                        <button style={s.roleBtn} onClick={() => setEvenementActif(e)}>
+                          👥
+                        </button>
+                        <button style={s.deleteBtn} onClick={() => supprimerEvenement(e.id)}>
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
@@ -193,107 +334,91 @@ export default function Admin({ token }) {
 }
 
 const s = {
-  container: { maxWidth: "1100px", margin: "0 auto" },
-  pageHeader: { marginBottom: "1.5rem" },
-  adminBadge: {
-    display: "inline-block", background: "rgba(255,61,87,0.15)",
-    border: "1px solid rgba(255,61,87,0.3)", color: "#FF3D57",
-    padding: "0.3rem 0.75rem", borderRadius: "20px",
-    fontSize: "0.75rem", fontWeight: "700", letterSpacing: "2px",
-    marginBottom: "0.5rem",
+  container: { maxWidth: "1200px", margin: "0 auto" },
+  toast: {
+    position: "fixed", top: "1rem", right: "1rem", zIndex: 1000,
+    background: "rgba(0,230,118,0.15)", border: "1px solid rgba(0,230,118,0.3)",
+    color: "#00E676", padding: "0.75rem 1.5rem", borderRadius: "12px",
+    fontWeight: "600", fontSize: "0.9rem",
   },
+  pageHeader: { marginBottom: "1.5rem" },
   pageTitle: {
     fontFamily: "var(--font-display)", fontSize: "2.5rem",
     fontWeight: "900", color: "white", marginBottom: "0.25rem",
   },
   pageDesc: { color: "var(--text2)", fontSize: "0.95rem" },
-  toast: {
-    background: "rgba(0,230,118,0.1)", border: "1px solid rgba(0,230,118,0.3)",
-    color: "#00E676", padding: "1rem", borderRadius: "12px",
-    marginBottom: "1.5rem", fontWeight: "600",
-  },
   tabs: {
     display: "flex", gap: "0.5rem", marginBottom: "2rem",
     background: "var(--dark3)", borderRadius: "12px", padding: "4px",
     width: "fit-content",
   },
   tab: {
-    display: "flex", alignItems: "center", gap: "0.5rem",
     padding: "0.6rem 1.25rem", border: "none", background: "transparent",
     color: "var(--text2)", cursor: "pointer", borderRadius: "8px",
-    fontWeight: "600", fontSize: "0.9rem", transition: "all 0.2s",
+    fontWeight: "600", fontSize: "0.9rem",
   },
   tabActive: { background: "var(--blue)", color: "white" },
-  tabBadge: {
-    background: "rgba(255,255,255,0.2)", color: "white",
-    borderRadius: "20px", padding: "0.1rem 0.5rem",
-    fontSize: "0.75rem", fontWeight: "700",
-  },
   statsGrid: {
-    display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem",
+    display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "1rem",
   },
   statCard: {
     background: "var(--dark3)", borderRadius: "16px", padding: "1.5rem",
-    border: "1px solid rgba(255,255,255,0.05)",
-    display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem",
+    border: "1px solid rgba(255,255,255,0.05)", textAlign: "center",
   },
   statIcon: {
-    width: "56px", height: "56px", borderRadius: "16px",
+    width: "48px", height: "48px", borderRadius: "12px",
     display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: "1.5rem", marginBottom: "0.5rem",
+    fontSize: "1.5rem", margin: "0 auto 0.75rem",
   },
   statValue: {
-    fontFamily: "var(--font-display)", fontSize: "2.5rem",
-    fontWeight: "900",
+    fontFamily: "var(--font-display)", fontSize: "2rem",
+    fontWeight: "900", color: "white", marginBottom: "0.25rem",
   },
-  statLabel: { color: "var(--text2)", fontSize: "0.85rem", fontWeight: "600" },
-  loading: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    gap: "1rem", padding: "3rem",
+  statLabel: { color: "var(--text2)", fontSize: "0.8rem" },
+  card: {
+    background: "var(--dark3)", borderRadius: "16px", padding: "1.5rem",
+    border: "1px solid rgba(255,255,255,0.05)",
   },
-  spinner: {
-    width: "40px", height: "40px", borderRadius: "50%",
-    border: "3px solid var(--dark3)", borderTopColor: "var(--blue)",
+  cardTitle: {
+    fontFamily: "var(--font-display)", fontSize: "1.2rem",
+    fontWeight: "800", color: "white", marginBottom: "1.25rem",
   },
-  table: {
-    background: "var(--dark3)", borderRadius: "16px",
-    border: "1px solid rgba(255,255,255,0.05)", overflow: "hidden",
-  },
-  tableHeader: {
-    display: "flex", padding: "1rem 1.5rem",
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-    background: "var(--dark4)",
-  },
+  tableWrapper: { overflowX: "auto" },
+  table: { width: "100%", borderCollapse: "collapse" },
   th: {
-    flex: 1, color: "var(--text2)", fontSize: "0.75rem",
-    fontWeight: "700", textTransform: "uppercase", letterSpacing: "1px",
+    color: "var(--text2)", fontSize: "0.75rem", fontWeight: "700",
+    textTransform: "uppercase", letterSpacing: "1px",
+    padding: "0.75rem 1rem", textAlign: "left",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
   },
-  tableRow: {
-    display: "flex", alignItems: "center", padding: "1rem 1.5rem",
-    borderBottom: "1px solid rgba(255,255,255,0.03)",
-    transition: "background 0.2s",
-  },
-  td: { flex: 1, color: "white", fontSize: "0.85rem" },
-  userCell: { display: "flex", alignItems: "center", gap: "0.75rem" },
-  userAvatar: {
+  tr: { borderBottom: "1px solid rgba(255,255,255,0.03)" },
+  td: { padding: "0.75rem 1rem", verticalAlign: "middle" },
+  avatar: {
     width: "36px", height: "36px", borderRadius: "50%",
     background: "linear-gradient(135deg, var(--blue), var(--cyan))",
     display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: "0.85rem", fontWeight: "900", color: "white", flexShrink: 0,
+    fontSize: "0.8rem", fontWeight: "900", color: "white", overflow: "hidden",
   },
+  avatarImg: { width: "100%", height: "100%", objectFit: "cover" },
   userName: { color: "white", fontWeight: "600", fontSize: "0.9rem" },
-  userEmail: { color: "var(--text2)", fontSize: "0.75rem" },
-  niveauBadge: {
-    padding: "0.2rem 0.6rem", borderRadius: "20px",
-    fontSize: "0.75rem", fontWeight: "700",
+  email: { color: "var(--text2)", fontSize: "0.8rem" },
+  meta: { color: "var(--text2)", fontSize: "0.85rem" },
+  niveauBadge: { fontSize: "0.82rem", fontWeight: "600", textTransform: "capitalize" },
+  statutBadge: {
+    padding: "0.2rem 0.6rem", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700",
   },
-  roleBadge: {
-    padding: "0.2rem 0.6rem", borderRadius: "20px",
-    fontSize: "0.75rem", fontWeight: "700",
+  adminBadge: {
+    background: "rgba(255,179,0,0.1)", color: "#FFB300",
+    padding: "0.2rem 0.6rem", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700",
   },
+  userBadge: {
+    background: "rgba(255,255,255,0.05)", color: "var(--text2)",
+    padding: "0.2rem 0.6rem", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700",
+  },
+  actions: { display: "flex", gap: "0.4rem" },
   roleBtn: {
-    padding: "0.4rem 0.6rem", background: "rgba(255,179,0,0.1)",
-    border: "1px solid rgba(255,179,0,0.3)", borderRadius: "8px",
+    padding: "0.4rem 0.6rem", background: "rgba(0,87,255,0.1)",
+    border: "1px solid rgba(0,87,255,0.3)", borderRadius: "8px",
     cursor: "pointer", fontSize: "0.85rem",
   },
   deleteBtn: {
@@ -301,4 +426,29 @@ const s = {
     border: "1px solid rgba(255,61,87,0.3)", borderRadius: "8px",
     cursor: "pointer", fontSize: "0.85rem",
   },
+  backBtn: {
+    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+    color: "var(--text2)", padding: "0.5rem 1rem", borderRadius: "8px",
+    cursor: "pointer", fontWeight: "600", fontSize: "0.85rem", marginBottom: "1.5rem",
+    display: "inline-block",
+  },
+  eventHeader: {
+    display: "flex", gap: "1.5rem", alignItems: "center",
+    background: "var(--dark3)", borderRadius: "16px", padding: "1.5rem",
+    border: "1px solid rgba(255,255,255,0.05)", marginBottom: "1.5rem",
+  },
+  eventIcon: { fontSize: "3rem", flexShrink: 0 },
+  eventTitre: {
+    fontFamily: "var(--font-display)", fontSize: "1.8rem",
+    fontWeight: "900", color: "white", marginBottom: "0.5rem",
+  },
+  eventMeta: { display: "flex", flexWrap: "wrap", gap: "1rem", color: "var(--text2)", fontSize: "0.85rem" },
+  deleteEventBtn: {
+    marginLeft: "auto", padding: "0.75rem 1.25rem",
+    background: "rgba(255,61,87,0.1)", border: "1px solid rgba(255,61,87,0.3)",
+    borderRadius: "10px", color: "#FF3D57", cursor: "pointer",
+    fontWeight: "700", fontSize: "0.85rem", flexShrink: 0,
+  },
+  emptyText: { color: "var(--text2)", fontSize: "0.9rem" },
+  sportIcon: { color: "white", fontSize: "0.85rem" },
 };

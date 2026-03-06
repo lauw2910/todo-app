@@ -49,7 +49,6 @@ router.post("/", async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
     `, [nom, description, sport_id, req.userId, ville, prive || false]);
 
-    // Ajouter le créateur comme admin
     await pool.query(`
       INSERT INTO groupe_membres (groupe_id, user_id, role)
       VALUES ($1, $2, 'admin')
@@ -134,5 +133,25 @@ router.post("/:id/messages", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// DELETE /api/groupes/:id
+router.delete("/:id", async (req, res) => {
+  try {
+    const groupe = await pool.query("SELECT createur_id FROM groupes WHERE id = $1", [req.params.id]);
+    if (!groupe.rows[0]) return res.status(404).json({ error: "Groupe introuvable" });
+
+    const user = await pool.query("SELECT role FROM users WHERE id = $1", [req.userId]);
+    const isAdmin = user.rows[0]?.role === "admin";
+    const isCreateur = groupe.rows[0].createur_id === req.userId;
+
+    if (!isAdmin && !isCreateur) return res.status(403).json({ error: "Non autorisé" });
+
+    await pool.query("DELETE FROM groupes WHERE id = $1", [req.params.id]);
+    res.json({ message: "Groupe supprimé" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 module.exports = router;

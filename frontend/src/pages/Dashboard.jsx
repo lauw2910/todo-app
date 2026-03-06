@@ -65,7 +65,7 @@ export default function Dashboard({ token, user, onLogout }) {
   const bottomNavItems = [
     { id: "accueil", icon: "🏠", label: "Accueil" },
     { id: "joueurs", icon: "🔍", label: "Joueurs" },
-    { id: "groupes", icon: "👥", label: "Groupes" },
+    { id: "evenements", icon: "📅", label: "Événements" },
     { id: "messages", icon: "💬", label: "Messages", badge: unreadCount },
     { id: "profil", icon: "👤", label: "Profil" },
   ];
@@ -117,7 +117,7 @@ export default function Dashboard({ token, user, onLogout }) {
         {page === "joueurs" && <Joueurs token={token} onContact={handleContact} />}
         {page === "carte" && <Carte token={token} onContact={handleContact} />}
         {page === "evenements" && <Evenements token={token} />}
-        {page === "groupes" && <Groupes token={token} userId={user?.id} />}
+        {page === "groupes" && <Groupes token={token} userId={user?.id} userRole={user?.role} />}
         {page === "messages" && <Messages token={token} userId={user?.id} initialUser={contactUser} />}
         {page === "admin" && isAdmin && <Admin token={token} />}
       </main>
@@ -263,7 +263,7 @@ const s = {
     color: "var(--text2)", cursor: "pointer", fontSize: "0.85rem", fontWeight: "600",
   },
   mobileHeader: {
-    position: "fixed", top: 0, left: 0, right: 0, zIndex: 10,
+    position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
     background: "var(--dark2)", borderBottom: "1px solid rgba(255,255,255,0.05)",
     padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "0.5rem",
     height: "60px",
@@ -274,9 +274,10 @@ const s = {
     color: "var(--text2)", cursor: "pointer", padding: "0.4rem 0.75rem", fontSize: "0.9rem",
   },
   bottomNav: {
-    position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 10,
+    position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
     background: "var(--dark2)", borderTop: "1px solid rgba(255,255,255,0.05)",
     display: "flex", height: "65px",
+    paddingBottom: "env(safe-area-inset-bottom)",
   },
   bottomNavItem: {
     flex: 1, display: "flex", flexDirection: "column",
@@ -285,7 +286,7 @@ const s = {
   },
   bottomNavItemActive: { background: "rgba(0,87,255,0.1)" },
   bottomNavIcon: { fontSize: "1.3rem" },
-  bottomNavLabel: { color: "var(--text2)", fontSize: "0.65rem", fontWeight: "600" },
+  bottomNavLabel: { color: "var(--text2)", fontSize: "0.6rem", fontWeight: "600" },
   bottomNavBadge: {
     position: "absolute", top: "6px", right: "calc(50% - 18px)",
     background: "#FF3D57", color: "white", borderRadius: "50%",
@@ -293,7 +294,12 @@ const s = {
     alignItems: "center", justifyContent: "center", fontSize: "0.6rem", fontWeight: "700",
   },
   main: { marginLeft: "260px", flex: 1, padding: "2rem", minHeight: "100vh" },
-  mainMobile: { flex: 1, padding: "1rem", paddingTop: "75px", paddingBottom: "80px", minHeight: "100vh" },
+  mainMobile: {
+    flex: 1, padding: "1rem",
+    paddingTop: "75px",
+    paddingBottom: "calc(65px + env(safe-area-inset-bottom))",
+    minHeight: "100vh",
+  },
   content: { maxWidth: "1000px", margin: "0 auto" },
   hero: {
     background: "linear-gradient(135deg, var(--dark3), var(--dark4))",
