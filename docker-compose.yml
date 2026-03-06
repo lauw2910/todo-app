@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: todouser
+      POSTGRES_PASSWORD: todopass
+      POSTGRES_DB: tododb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://todouser:todopass@db:5432/tododb
+      JWT_SECRET: mon_secret_jwt_a_changer
+      PORT: 3000
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: noreply.sportconnect26@gmail.com
+      SMTP_PASS: htdvbroxczzzdjno
+      APP_URL: sportconnect.duckdns.org
+      GOOGLE_CLIENT_ID: secret
+      GOOGLE_CLIENT_SECRET: secret
+    depends_on:
+      - db
+    restart: always
+    volumes:
+      - uploads:/uploads
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - uploads:/uploads
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: always
+
+volumes:
+  pgdata:
+  uploads:
