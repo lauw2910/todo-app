@@ -8,6 +8,7 @@ const http = require("http");
 const { WebSocketServer } = require("ws");
 const jwt = require("jsonwebtoken");
 const pool = require("./db");
+const { emailNouveauMessage } = require("./email");
 const authRoutes = require("./routes/auth");
 const profilRoutes = require("./routes/profil");
 const joueursRoutes = require("./routes/joueurs");
@@ -24,7 +25,8 @@ const rgpdRoutes = require("./routes/rgpd");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS strict
+app.set("trust proxy", 1);
+
 const allowedOrigins = [
   "https://sportconnect.duckdns.org",
   "http://localhost:5173",
@@ -44,13 +46,11 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
-// Sécurité headers
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
 
-// Rate limiting global
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
@@ -59,7 +59,6 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Rate limiting strict auth
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
@@ -68,7 +67,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Middleware blocage IP brute force
 async function checkIPBlocked(req, res, next) {
   try {
     const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown";
@@ -111,7 +109,6 @@ app.use(session({
 }));
 app.use(passport.initialize());
 
-// Routes
 app.use("/api/auth", authLimiter, checkIPBlocked, authRoutes);
 app.use("/api/auth/google", googleRoutes);
 app.use("/api/profil", profilRoutes);
@@ -300,11 +297,9 @@ async function initDB() {
   console.log("✓ Base de données prête");
 }
 
-// Serveur HTTP + WebSocket
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Map des connexions : userId → ws
 const clients = new Map();
 
 wss.on("connection", (ws) => {
@@ -314,7 +309,6 @@ wss.on("connection", (ws) => {
     try {
       const data = JSON.parse(raw);
 
-      // Authentification
       if (data.type === "auth") {
         try {
           const decoded = jwt.verify(data.token, process.env.JWT_SECRET);
@@ -331,10 +325,11 @@ wss.on("connection", (ws) => {
 
       if (!userId) return;
 
-      // Message privé
       if (data.type === "message") {
         const { destinataire_id, contenu } = data;
         if (!destinataire_id || !contenu?.trim()) return;
+
+        console.log(`[WS] Message de ${userId} à ${destinataire_id}: ${contenu.trim().substring(0, 50)}`);
 
         const result = await pool.query(`
           INSERT INTO messages (expediteur_id, destinataire_id, contenu)
@@ -361,9 +356,22 @@ wss.on("connection", (ws) => {
         if (destWs && destWs.readyState === 1) {
           destWs.send(payload);
         }
+
+        // Email notification
+        try {
+          const [expediteurInfo, destinataireInfo] = await Promise.all([
+            pool.query("SELECT prenom, nom FROM users WHERE id = $1", [userId]),
+            pool.query("SELECT prenom, nom, email FROM users WHERE id = $1", [destinataire_id]),
+          ]);
+          console.log("[WS] Envoi email à", destinataireInfo.rows[0]?.email);
+          if (destinataireInfo.rows[0]?.email) {
+            emailNouveauMessage(destinataireInfo.rows[0], expediteurInfo.rows[0]);
+          }
+        } catch (emailErr) {
+          console.error("[WS] Erreur email:", emailErr.message);
+        }
       }
 
-      // Message de groupe
       if (data.type === "groupe_message") {
         const { groupe_id, contenu } = data;
         if (!groupe_id || !contenu?.trim()) return;
@@ -405,7 +413,6 @@ wss.on("connection", (ws) => {
         });
       }
 
-      // Ping keepalive
       if (data.type === "ping") {
         ws.send(JSON.stringify({ type: "pong" }));
       }
