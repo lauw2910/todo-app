@@ -12,35 +12,38 @@ export default function App() {
   const [showConfidentialite, setShowConfidentialite] = useState(false);
   const [confidentialiteTab, setConfidentialiteTab] = useState("cgu");
   const [verifyMsg, setVerifyMsg] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    // Vérification email — fonctionne même si connecté
+    // Vérification email
     const verifyToken = params.get("verify");
     if (verifyToken) {
+      setVerifying(true);
       fetch(`/api/auth/verify-email?token=${verifyToken}`)
         .then(res => res.json())
         .then(data => {
           window.history.replaceState({}, "", "/");
+          const currentToken = localStorage.getItem("token");
+          const currentUser = JSON.parse(localStorage.getItem("user") || "null");
           if (data.message) {
-            const currentToken = localStorage.getItem("token");
-            const currentUser = JSON.parse(localStorage.getItem("user") || "null");
             if (currentToken && currentUser) {
-              // Connecté → met à jour le user
               const updatedUser = { ...currentUser, email_verifie: true };
               localStorage.setItem("user", JSON.stringify(updatedUser));
               setUser(updatedUser);
+              setVerifying(false);
               alert("✅ Email vérifié avec succès !");
               window.location.reload();
             } else {
-              // Pas connecté → affiche login avec message
               setVerifyMsg(data.message);
               setShowLogin(true);
+              setVerifying(false);
             }
           } else {
             setVerifyMsg(data.error || "Lien invalide ou expiré");
             setShowLogin(true);
+            setVerifying(false);
           }
         });
       return;
@@ -105,6 +108,26 @@ export default function App() {
     setUser(null);
     setShowLogin(false);
     setVerifyMsg("");
+  }
+
+  // Écran de vérification email en cours
+  if (verifying) {
+    return (
+      <div style={{
+        minHeight: "100vh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        background: "var(--dark)", gap: "1rem",
+      }}>
+        <div style={{
+          width: "50px", height: "50px", borderRadius: "50%",
+          border: "4px solid var(--dark3)", borderTopColor: "var(--blue)",
+          animation: "spin 0.8s linear infinite",
+        }}/>
+        <p style={{ color: "var(--text2)", fontSize: "1rem" }}>
+          Vérification de ton email...
+        </p>
+      </div>
+    );
   }
 
   return (

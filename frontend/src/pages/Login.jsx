@@ -49,7 +49,11 @@ export default function Login({ onLogin, onBack, verifyMsg }) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Une erreur est survenue");
+        if (data.emailNotVerified) {
+          setError("📧 " + data.error);
+        } else {
+          setError(data.error || "Une erreur est survenue");
+        }
         return;
       }
 

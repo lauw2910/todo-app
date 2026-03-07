@@ -150,7 +150,16 @@ router.post("/login", loginRules, validate, async (req, res) => {
       return res.status(401).json({ error: "Email ou mot de passe incorrect" });
     }
 
-    // Vérification 2FA si activé
+   // Vérification email obligatoire
+    if (!user.email_verifie) {
+      await log(user.id, "LOGIN_FAILED", `Connexion refusée : email non vérifié (${email})`, req);
+      return res.status(401).json({
+        error: "Tu dois vérifier ton email avant de te connecter. Vérifie ta boîte mail.",
+        emailNotVerified: true,
+      });
+    } 
+
+   // Vérification 2FA si activé
     if (user.deux_fa_actif) {
       if (!code2fa) {
         // Génère et envoie le code 2FA
