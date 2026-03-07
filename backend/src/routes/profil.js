@@ -23,7 +23,7 @@ router.use(auth);
 router.get("/", async (req, res) => {
   try {
     const user = await pool.query(
-      "SELECT id, email, nom, prenom, age, ville, niveau FROM users WHERE id = $1",
+    "SELECT id, email, nom, prenom, age, ville, niveau, photo, role, email_verifie, deux_fa_actif FROM users WHERE id = $1",
       [req.userId]
     );
 

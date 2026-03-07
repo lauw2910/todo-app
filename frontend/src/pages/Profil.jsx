@@ -8,6 +8,8 @@ export default function Profil({ token }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [deux_fa_actif, setDeuxFaActif] = useState(false);
+  const [togglingFA, setTogglingFA] = useState(false);
   const fileInputRef = useRef(null);
 
   const headers = {
@@ -25,6 +27,7 @@ export default function Profil({ token }) {
     const data = await res.json();
     setProfil(data);
     setSportsFavoris(data.sports?.map(s => s.id) || []);
+    setDeuxFaActif(data.deux_fa_actif || false);
     setLoading(false);
   }
 
@@ -62,6 +65,23 @@ export default function Profil({ token }) {
       setMessage("Erreur : " + data.error);
     }
     setUploadingPhoto(false);
+  }
+
+  async function toggle2FA() {
+    setTogglingFA(true);
+    const res = await fetch("/api/auth/toggle-2fa", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setDeuxFaActif(data.deux_fa_actif);
+      setMessage(data.message);
+      setTimeout(() => setMessage(""), 3000);
+    } else {
+      setMessage("Erreur : " + data.error);
+    }
+    setTogglingFA(false);
   }
 
   function toggleSport(id) {
@@ -178,6 +198,53 @@ export default function Profil({ token }) {
         </div>
       </div>
 
+      {/* Sécurité */}
+      <div style={s.card}>
+        <h3 style={s.cardTitle}>
+          <span style={s.cardTitleIcon}>🔐</span>
+          Sécurité
+        </h3>
+
+        {/* Email vérifié */}
+        <div style={s.securityCard}>
+          <div style={s.securityInfo}>
+            <div style={s.securityLabel}>Vérification email</div>
+            <div style={s.securityDesc}>
+              {profil?.email_verifie
+                ? "✅ Email vérifié — Ton adresse email est confirmée"
+                : "⚠️ Email non vérifié — Vérifie ta boîte mail pour confirmer ton adresse"}
+            </div>
+          </div>
+          <span style={{
+            ...s.statusBadge,
+            background: profil?.email_verifie ? "rgba(0,230,118,0.1)" : "rgba(255,179,0,0.1)",
+            color: profil?.email_verifie ? "#00E676" : "#FFB300",
+          }}>
+            {profil?.email_verifie ? "✅ Vérifié" : "⚠️ En attente"}
+          </span>
+        </div>
+
+        <div style={s.securityDivider}/>
+
+        {/* 2FA */}
+        <div style={s.securityCard}>
+          <div style={s.securityInfo}>
+            <div style={s.securityLabel}>Double authentification (2FA)</div>
+            <div style={s.securityDesc}>
+              {deux_fa_actif
+                ? "✅ Activé — Un code email est requis à chaque connexion"
+                : "❌ Désactivé — Active pour sécuriser davantage ton compte"}
+            </div>
+          </div>
+          <button
+            style={{...s.toggleBtn, ...(deux_fa_actif ? s.toggleBtnOn : {})}}
+            onClick={toggle2FA}
+            disabled={togglingFA}>
+            {togglingFA ? "..." : deux_fa_actif ? "Désactiver" : "Activer"}
+          </button>
+        </div>
+      </div>
+
       {message && (
         <div style={message.includes("Erreur") ? s.errorMsg : s.successMsg}>
           {message.includes("Erreur") ? "❌" : "✅"} {message}
@@ -291,6 +358,30 @@ const s = {
     background: "var(--blue)", color: "white", borderRadius: "50%",
     width: "18px", height: "18px", display: "flex",
     alignItems: "center", justifyContent: "center", fontSize: "0.65rem",
+  },
+  securityCard: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    gap: "1rem", padding: "1rem 0", flexWrap: "wrap",
+  },
+  securityDivider: {
+    height: "1px", background: "rgba(255,255,255,0.05)", margin: "0.25rem 0",
+  },
+  securityInfo: { flex: 1 },
+  securityLabel: { color: "white", fontWeight: "600", fontSize: "0.95rem", marginBottom: "0.3rem" },
+  securityDesc: { color: "var(--text2)", fontSize: "0.82rem", lineHeight: "1.5" },
+  statusBadge: {
+    padding: "0.3rem 0.75rem", borderRadius: "20px",
+    fontSize: "0.78rem", fontWeight: "700", whiteSpace: "nowrap", flexShrink: 0,
+  },
+  toggleBtn: {
+    padding: "0.6rem 1.25rem", background: "rgba(0,87,255,0.1)",
+    border: "1px solid rgba(0,87,255,0.3)", borderRadius: "10px",
+    color: "var(--cyan)", fontWeight: "700", cursor: "pointer",
+    fontSize: "0.85rem", whiteSpace: "nowrap", flexShrink: 0,
+  },
+  toggleBtnOn: {
+    background: "rgba(255,61,87,0.1)", border: "1px solid rgba(255,61,87,0.3)",
+    color: "#FF3D57",
   },
   successMsg: {
     background: "rgba(0, 230, 118, 0.1)", border: "1px solid rgba(0,230,118,0.3)",

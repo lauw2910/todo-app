@@ -2,25 +2,27 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: todouser
-      POSTGRES_PASSWORD: todopass
-      POSTGRES_DB: tododb
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
 
   backend:
     build: ./backend
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgres://todouser:todopass@db:5432/tododb
-      JWT_SECRET: mon_secret_jwt_a_changer
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
       PORT: 3000
-      SMTP_HOST: smtp.gmail.com
-      SMTP_PORT: 587
-      SMTP_USER: noreply.sportconnect26@gmail.com
-      SMTP_PASS: htdvbroxczzzdjno
-      APP_URL: sportconnect.duckdns.org
-      GOOGLE_CLIENT_ID: secret
-      GOOGLE_CLIENT_SECRET: scret
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      APP_URL: ${APP_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
       - db
     restart: always

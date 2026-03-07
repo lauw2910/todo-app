@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 export default function Messages({ token, userId, initialUser }) {
   const [conversations, setConversations] = useState([]);
@@ -6,10 +7,32 @@ export default function Messages({ token, userId, initialUser }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
   const messagesEndRef = useRef(null);
   const isMobile = window.innerWidth <= 768;
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  // Gestion des messages WebSocket entrants
+  const handleWsMessage = useCallback((data) => {
+    if (data.type === "message") {
+      setMessages(prev => {
+        // Évite les doublons
+        if (prev.find(m => m.id === data.id)) return prev;
+        return [...prev, data];
+      });
+      setConversations(prev => prev.map(c => {
+        if (c.other_user === data.expediteur_id || c.other_user === data.destinataire_id) {
+          return { ...c, dernier_message: data.contenu };
+        }
+        return c;
+      }));
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+    if (data.type === "auth_ok") setWsConnected(true);
+  }, []);
+
+  const { sendMessage: wsSend } = useWebSocket(token, handleWsMessage);
 
   useEffect(() => {
     fetchConversations();
@@ -24,8 +47,6 @@ export default function Messages({ token, userId, initialUser }) {
   useEffect(() => {
     if (!convActuelle) return;
     fetchMessages(convActuelle.other_user);
-    const interval = setInterval(() => fetchMessages(convActuelle.other_user), 3000);
-    return () => clearInterval(interval);
   }, [convActuelle]);
 
   async function fetchConversations() {
@@ -44,11 +65,24 @@ export default function Messages({ token, userId, initialUser }) {
 
   async function sendMessage() {
     if (!newMessage.trim()) return;
-    await fetch(`/api/messages/${convActuelle.other_user}`, {
-      method: "POST", headers, body: JSON.stringify({ contenu: newMessage }),
-    });
+    const contenu = newMessage.trim();
     setNewMessage("");
-    fetchMessages(convActuelle.other_user);
+
+    // Envoie via WebSocket
+    const sent = wsSend({
+      type: "message",
+      destinataire_id: convActuelle.other_user,
+      contenu,
+    });
+
+    // Fallback HTTP si WS pas connecté
+    if (!sent) {
+      await fetch(`/api/messages/${convActuelle.other_user}`, {
+        method: "POST", headers, body: JSON.stringify({ contenu }),
+      });
+      fetchMessages(convActuelle.other_user);
+    }
+
     fetchConversations();
   }
 
@@ -76,7 +110,14 @@ export default function Messages({ token, userId, initialUser }) {
           </div>
           <div>
             <div style={s.chatHeaderNom}>{convActuelle.prenom} {convActuelle.nom}</div>
-            <div style={s.chatHeaderSub}>En ligne</div>
+            <div style={s.chatHeaderSub}>
+              <span style={{
+                display: "inline-block", width: "8px", height: "8px",
+                borderRadius: "50%", background: wsConnected ? "#00E676" : "#FFB300",
+                marginRight: "0.4rem",
+              }}/>
+              {wsConnected ? "Temps réel" : "Connexion..."}
+            </div>
           </div>
         </div>
 
@@ -131,8 +172,21 @@ export default function Messages({ token, userId, initialUser }) {
   return (
     <div style={s.container} className="fade-in">
       <div style={s.pageHeader}>
-        <h1 style={s.pageTitle}>Messages</h1>
-        <p style={s.pageDesc}>Tes conversations avec d'autres sportifs</p>
+        <div>
+          <h1 style={s.pageTitle}>Messages</h1>
+          <p style={s.pageDesc}>Tes conversations avec d'autres sportifs</p>
+        </div>
+        <div style={{
+          display: "flex", alignItems: "center", gap: "0.4rem",
+          fontSize: "0.8rem", color: wsConnected ? "#00E676" : "#FFB300",
+        }}>
+          <span style={{
+            width: "8px", height: "8px", borderRadius: "50%",
+            background: wsConnected ? "#00E676" : "#FFB300",
+            display: "inline-block",
+          }}/>
+          {wsConnected ? "Temps réel" : "Connexion..."}
+        </div>
       </div>
 
       {loading ? (
@@ -173,7 +227,10 @@ export default function Messages({ token, userId, initialUser }) {
 
 const s = {
   container: { maxWidth: "700px", margin: "0 auto" },
-  pageHeader: { marginBottom: "1.5rem" },
+  pageHeader: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    marginBottom: "1.5rem",
+  },
   pageTitle: {
     fontFamily: "var(--font-display)", fontSize: "2.5rem",
     fontWeight: "900", color: "white", marginBottom: "0.25rem",
@@ -197,7 +254,6 @@ const s = {
     display: "flex", alignItems: "center", gap: "1rem",
     background: "var(--dark3)", borderRadius: "14px", padding: "1rem 1.25rem",
     border: "1px solid rgba(255,255,255,0.05)", cursor: "pointer",
-    transition: "all 0.2s",
   },
   convAvatar: {
     width: "48px", height: "48px", borderRadius: "50%",
@@ -226,23 +282,17 @@ const s = {
     width: "20px", height: "20px", display: "flex",
     alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: "700",
   },
-
-  // Chat desktop
   chatPage: {
     display: "flex", flexDirection: "column",
     height: "calc(100vh - 60px)",
     maxWidth: "700px", margin: "0 auto",
   },
-
-  // Chat mobile — plein écran par-dessus tout
   chatPageMobile: {
     position: "fixed",
     top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 200,
-    background: "var(--dark)",
+    zIndex: 200, background: "var(--dark)",
     display: "flex", flexDirection: "column",
   },
-
   chatHeader: {
     display: "flex", alignItems: "center", gap: "0.75rem",
     padding: "1rem 1.25rem",
@@ -264,16 +314,12 @@ const s = {
   },
   headerAvatarImg: { width: "100%", height: "100%", objectFit: "cover" },
   chatHeaderNom: { color: "white", fontWeight: "700", fontSize: "0.95rem" },
-  chatHeaderSub: { color: "#00E676", fontSize: "0.75rem" },
-
+  chatHeaderSub: { color: "var(--text2)", fontSize: "0.75rem", display: "flex", alignItems: "center" },
   chatMessages: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "1rem",
+    flex: 1, overflowY: "auto", padding: "1rem",
     display: "flex", flexDirection: "column", gap: "0.5rem",
     minHeight: 0,
   },
-
   chatEmpty: { textAlign: "center", padding: "3rem 0", color: "var(--text2)" },
   chatEmptyIcon: { fontSize: "3rem", display: "block", marginBottom: "0.5rem" },
   timeSep: {
@@ -301,15 +347,11 @@ const s = {
   },
   msgText: { color: "white", fontSize: "0.9rem", lineHeight: "1.5", margin: 0 },
   msgTime: { color: "var(--text2)", fontSize: "0.7rem", display: "block", marginTop: "0.25rem" },
-
-  // Input desktop
   chatInput: {
     display: "flex", gap: "0.5rem", padding: "1rem",
     borderTop: "1px solid rgba(255,255,255,0.05)",
     background: "var(--dark2)", flexShrink: 0,
   },
-
-  // Input mobile — collé en bas, au-dessus du clavier
   chatInputMobile: {
     display: "flex", gap: "0.5rem",
     padding: "0.75rem 1rem",
@@ -317,7 +359,6 @@ const s = {
     borderTop: "1px solid rgba(255,255,255,0.05)",
     background: "var(--dark2)", flexShrink: 0,
   },
-
   chatInputField: {
     flex: 1, padding: "0.85rem 1rem", background: "var(--dark4)",
     border: "2px solid transparent", borderRadius: "12px",

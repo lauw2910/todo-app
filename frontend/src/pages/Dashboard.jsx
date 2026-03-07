@@ -17,7 +17,7 @@ function useIsMobile() {
   return isMobile;
 }
 
-export default function Dashboard({ token, user, onLogout }) {
+export default function Dashboard({ token, user, onLogout, onShowLegal }) {
   const [page, setPage] = useState("accueil");
   const [contactUser, setContactUser] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -99,6 +99,11 @@ export default function Dashboard({ token, user, onLogout }) {
               </div>
             </div>
             <button style={s.logoutBtn} onClick={onLogout}>↩ Déconnexion</button>
+            {onShowLegal && (
+              <button style={s.legalBtn} onClick={() => onShowLegal("cgu")}>
+                ⚖️ CGU & Confidentialité
+              </button>
+            )}
           </div>
         </aside>
       )}
@@ -112,7 +117,7 @@ export default function Dashboard({ token, user, onLogout }) {
       )}
 
       <main style={isMobile ? s.mainMobile : s.main}>
-        {page === "accueil" && <Accueil user={user} setPage={setPage} isAdmin={isAdmin} isMobile={isMobile} token={token} />}
+        {page === "accueil" && <Accueil user={user} setPage={setPage} isAdmin={isAdmin} isMobile={isMobile} token={token} onShowLegal={onShowLegal} />}
         {page === "profil" && <Profil token={token} />}
         {page === "joueurs" && <Joueurs token={token} onContact={handleContact} />}
         {page === "carte" && <Carte token={token} onContact={handleContact} />}
@@ -139,7 +144,7 @@ export default function Dashboard({ token, user, onLogout }) {
   );
 }
 
-function Accueil({ user, setPage, isAdmin, isMobile, token }) {
+function Accueil({ user, setPage, isAdmin, isMobile, token, onShowLegal }) {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
@@ -207,6 +212,20 @@ function Accueil({ user, setPage, isAdmin, isMobile, token }) {
           <span style={{marginLeft: "auto"}}>→</span>
         </div>
       )}
+
+      {onShowLegal && (
+        <div style={s.legalFooter}>
+          <button style={s.legalFooterLink} onClick={() => onShowLegal("cgu")}>CGU</button>
+          <span style={s.legalSep}>•</span>
+          <button style={s.legalFooterLink} onClick={() => onShowLegal("confidentialite")}>
+            Politique de confidentialité
+          </button>
+          <span style={s.legalSep}>•</span>
+          <button style={s.legalFooterLink} onClick={() => onShowLegal("donnees")}>
+            Mes données
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -261,6 +280,12 @@ const s = {
     width: "100%", padding: "0.7rem", background: "rgba(255,255,255,0.05)",
     border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
     color: "var(--text2)", cursor: "pointer", fontSize: "0.85rem", fontWeight: "600",
+    marginBottom: "0.5rem",
+  },
+  legalBtn: {
+    width: "100%", padding: "0.5rem", background: "transparent",
+    border: "none", color: "var(--text2)", cursor: "pointer",
+    fontSize: "0.75rem", fontWeight: "600", textDecoration: "underline",
   },
   mobileHeader: {
     position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
@@ -346,6 +371,16 @@ const s = {
     display: "flex", alignItems: "center", gap: "0.75rem",
     background: "rgba(255,61,87,0.08)", border: "1px solid rgba(255,61,87,0.2)",
     borderRadius: "12px", padding: "1rem 1.5rem", cursor: "pointer",
-    color: "#FF3D57", fontWeight: "600", fontSize: "0.9rem",
+    color: "#FF3D57", fontWeight: "600", fontSize: "0.9rem", marginBottom: "1.5rem",
   },
+  legalFooter: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    gap: "0.75rem", marginTop: "2rem", flexWrap: "wrap",
+  },
+  legalFooterLink: {
+    background: "none", border: "none", color: "var(--text2)",
+    cursor: "pointer", fontSize: "0.8rem", fontWeight: "600",
+    textDecoration: "underline",
+  },
+  legalSep: { color: "var(--text2)", fontSize: "0.8rem" },
 };

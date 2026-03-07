@@ -5,19 +5,22 @@ export default function Admin({ token }) {
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [evenements, setEvenements] = useState([]);
+  const [groupes, setGroupes] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [evenementActif, setEvenementActif] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [toast, setToast] = useState("");
+  const [logsFilter, setLogsFilter] = useState("");
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  useEffect(() => { fetchStats(); }, []);
 
   useEffect(() => {
     if (onglet === "users") fetchUsers();
     if (onglet === "evenements") fetchEvenements();
+    if (onglet === "groupes") fetchGroupes();
+    if (onglet === "logs") fetchLogs();
   }, [onglet]);
 
   useEffect(() => {
@@ -43,6 +46,18 @@ export default function Admin({ token }) {
     setEvenements(Array.isArray(data) ? data : []);
   }
 
+  async function fetchGroupes() {
+    const res = await fetch("/api/admin/groupes", { headers });
+    const data = await res.json();
+    setGroupes(Array.isArray(data) ? data : []);
+  }
+
+  async function fetchLogs() {
+    const res = await fetch("/api/rgpd/logs", { headers });
+    const data = await res.json();
+    setLogs(Array.isArray(data) ? data : []);
+  }
+
   async function fetchParticipants(id) {
     const res = await fetch(`/api/admin/evenements/${id}/participants`, { headers });
     const data = await res.json();
@@ -53,8 +68,7 @@ export default function Admin({ token }) {
     if (!confirm("Supprimer cet utilisateur ?")) return;
     await fetch(`/api/admin/users/${id}`, { method: "DELETE", headers });
     showToast("✅ Utilisateur supprimé");
-    fetchUsers();
-    fetchStats();
+    fetchUsers(); fetchStats();
   }
 
   async function changerRole(id, role) {
@@ -69,9 +83,15 @@ export default function Admin({ token }) {
     if (!confirm("Supprimer cet événement ?")) return;
     await fetch(`/api/admin/evenements/${id}`, { method: "DELETE", headers });
     showToast("✅ Événement supprimé");
-    fetchEvenements();
-    fetchStats();
+    fetchEvenements(); fetchStats();
     if (evenementActif?.id === id) setEvenementActif(null);
+  }
+
+  async function supprimerGroupe(id) {
+    if (!confirm("Supprimer ce groupe ?")) return;
+    await fetch(`/api/admin/groupes/${id}`, { method: "DELETE", headers });
+    showToast("✅ Groupe supprimé");
+    fetchGroupes(); fetchStats();
   }
 
   function showToast(msg) {
@@ -80,8 +100,12 @@ export default function Admin({ token }) {
   }
 
   function formatDate(d) {
-    return new Date(d).toLocaleDateString("fr-FR", {
-      day: "numeric", month: "short", year: "numeric",
+    return new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function formatDatetime(d) {
+    return new Date(d).toLocaleString("fr-FR", {
+      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
     });
   }
 
@@ -89,13 +113,28 @@ export default function Admin({ token }) {
     debutant: "#00E676", intermediaire: "#0057FF", avance: "#FFB300", expert: "#FF3D57"
   };
 
+  const actionColors = {
+    EXPORT_DONNEES: { bg: "rgba(0,87,255,0.1)", color: "#0057FF" },
+    SUPPRESSION_COMPTE: { bg: "rgba(255,61,87,0.1)", color: "#FF3D57" },
+    LOGIN: { bg: "rgba(0,230,118,0.1)", color: "#00E676" },
+    REGISTER: { bg: "rgba(0,229,255,0.1)", color: "#00E5FF" },
+  };
+
+  const logsFiltres = logs.filter(l => {
+    if (!logsFilter) return true;
+    return (
+      l.action?.toLowerCase().includes(logsFilter.toLowerCase()) ||
+      l.email?.toLowerCase().includes(logsFilter.toLowerCase()) ||
+      l.details?.toLowerCase().includes(logsFilter.toLowerCase())
+    );
+  });
+
   // Vue participants événement
   if (evenementActif) {
     return (
       <div style={s.container} className="fade-in">
         {toast && <div style={s.toast}>{toast}</div>}
         <button style={s.backBtn} onClick={() => setEvenementActif(null)}>← Retour</button>
-
         <div style={s.eventHeader}>
           <div style={s.eventIcon}>{evenementActif.sport_icone}</div>
           <div>
@@ -108,62 +147,55 @@ export default function Admin({ token }) {
             </div>
           </div>
           <button style={s.deleteEventBtn} onClick={() => supprimerEvenement(evenementActif.id)}>
-            🗑️ Supprimer l'événement
+            🗑️ Supprimer
           </button>
         </div>
-
         <div style={s.card}>
-          <h3 style={s.cardTitle}>
-            👥 Participants ({participants.length} / {evenementActif.nb_places})
-          </h3>
+          <h3 style={s.cardTitle}>👥 Participants ({participants.length} / {evenementActif.nb_places})</h3>
           {participants.length === 0 ? (
             <p style={s.emptyText}>Aucun participant</p>
           ) : (
-            <table style={s.table}>
-              <thead>
-                <tr>
-                  {["Avatar", "Nom", "Email", "Ville", "Niveau", "Statut", "Inscrit le"].map(h => (
-                    <th key={h} style={s.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {participants.map(p => (
-                  <tr key={p.id} style={s.tr}>
-                    <td style={s.td}>
-                      <div style={s.avatar}>
-                        {p.photo
-                          ? <img src={p.photo} style={s.avatarImg} alt="" />
-                          : `${p.prenom?.[0] || "?"}${p.nom?.[0] || ""}`
-                        }
-                      </div>
-                    </td>
-                    <td style={s.td}>
-                      <div style={s.userName}>
-                        {p.prenom || "—"} {p.nom || "—"}
-                      </div>
-                    </td>
-                    <td style={s.td}><span style={s.email}>{p.email}</span></td>
-                    <td style={s.td}><span style={s.meta}>{p.ville || "—"}</span></td>
-                    <td style={s.td}>
-                      <span style={{...s.niveauBadge, color: niveauColors[p.niveau] || "var(--text2)"}}>
-                        {p.niveau || "—"}
-                      </span>
-                    </td>
-                    <td style={s.td}>
-                      <span style={{
-                        ...s.statutBadge,
-                        background: p.statut === "accepte" ? "rgba(0,230,118,0.1)" : p.statut === "en_attente" ? "rgba(255,179,0,0.1)" : "rgba(255,61,87,0.1)",
-                        color: p.statut === "accepte" ? "#00E676" : p.statut === "en_attente" ? "#FFB300" : "#FF3D57",
-                      }}>
-                        {p.statut === "accepte" ? "✅ Accepté" : p.statut === "en_attente" ? "⏳ En attente" : "❌ Refusé"}
-                      </span>
-                    </td>
-                    <td style={s.td}><span style={s.meta}>{formatDate(p.joined_at)}</span></td>
+            <div style={s.tableWrapper}>
+              <table style={s.table}>
+                <thead>
+                  <tr>
+                    {["Avatar", "Nom", "Email", "Ville", "Niveau", "Statut", "Inscrit le"].map(h => (
+                      <th key={h} style={s.th}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {participants.map(p => (
+                    <tr key={p.id} style={s.tr}>
+                      <td style={s.td}>
+                        <div style={s.avatar}>
+                          {p.photo ? <img src={p.photo} style={s.avatarImg} alt="" />
+                            : `${p.prenom?.[0] || "?"}${p.nom?.[0] || ""}`}
+                        </div>
+                      </td>
+                      <td style={s.td}><div style={s.userName}>{p.prenom} {p.nom}</div></td>
+                      <td style={s.td}><span style={s.email}>{p.email}</span></td>
+                      <td style={s.td}><span style={s.meta}>{p.ville || "—"}</span></td>
+                      <td style={s.td}>
+                        <span style={{...s.niveauBadge, color: niveauColors[p.niveau] || "var(--text2)"}}>
+                          {p.niveau || "—"}
+                        </span>
+                      </td>
+                      <td style={s.td}>
+                        <span style={{
+                          ...s.statutBadge,
+                          background: p.statut === "accepte" ? "rgba(0,230,118,0.1)" : p.statut === "en_attente" ? "rgba(255,179,0,0.1)" : "rgba(255,61,87,0.1)",
+                          color: p.statut === "accepte" ? "#00E676" : p.statut === "en_attente" ? "#FFB300" : "#FF3D57",
+                        }}>
+                          {p.statut === "accepte" ? "✅ Accepté" : p.statut === "en_attente" ? "⏳ En attente" : "❌ Refusé"}
+                        </span>
+                      </td>
+                      <td style={s.td}><span style={s.meta}>{formatDate(p.joined_at)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -181,9 +213,11 @@ export default function Admin({ token }) {
 
       <div style={s.tabs}>
         {[
-          { id: "stats", label: "📊 Statistiques" },
+          { id: "stats", label: "📊 Stats" },
           { id: "users", label: "👤 Utilisateurs" },
           { id: "evenements", label: "📅 Événements" },
+          { id: "groupes", label: "👥 Groupes" },
+          { id: "logs", label: "🔍 Logs" },
         ].map(t => (
           <button key={t.id}
             style={{...s.tab, ...(onglet === t.id ? s.tabActive : {})}}
@@ -234,15 +268,11 @@ export default function Admin({ token }) {
                   <tr key={u.id} style={s.tr}>
                     <td style={s.td}>
                       <div style={s.avatar}>
-                        {u.photo
-                          ? <img src={u.photo} style={s.avatarImg} alt="" />
-                          : `${u.prenom?.[0] || "?"}${u.nom?.[0] || ""}`
-                        }
+                        {u.photo ? <img src={u.photo} style={s.avatarImg} alt="" />
+                          : `${u.prenom?.[0] || "?"}${u.nom?.[0] || ""}`}
                       </div>
                     </td>
-                    <td style={s.td}>
-                      <div style={s.userName}>{u.prenom || "—"} {u.nom || "—"}</div>
-                    </td>
+                    <td style={s.td}><div style={s.userName}>{u.prenom || "—"} {u.nom || "—"}</div></td>
                     <td style={s.td}><span style={s.email}>{u.email}</span></td>
                     <td style={s.td}><span style={s.meta}>{u.ville || "—"}</span></td>
                     <td style={s.td}>
@@ -264,9 +294,7 @@ export default function Admin({ token }) {
                           onClick={() => changerRole(u.id, u.role === "admin" ? "user" : "admin")}>
                           {u.role === "admin" ? "⬇️" : "👑"}
                         </button>
-                        <button style={s.deleteBtn} onClick={() => supprimerUser(u.id)}>
-                          🗑️
-                        </button>
+                        <button style={s.deleteBtn} onClick={() => supprimerUser(u.id)}>🗑️</button>
                       </div>
                     </td>
                   </tr>
@@ -293,17 +321,11 @@ export default function Admin({ token }) {
               <tbody>
                 {evenements.map(e => (
                   <tr key={e.id} style={s.tr}>
+                    <td style={s.td}><span style={s.sportIcon}>{e.sport_icone} {e.sport_nom}</span></td>
+                    <td style={s.td}><div style={s.userName}>{e.titre}</div></td>
                     <td style={s.td}>
-                      <span style={s.sportIcon}>{e.sport_icone} {e.sport_nom}</span>
-                    </td>
-                    <td style={s.td}>
-                      <div style={s.userName}>{e.titre}</div>
-                    </td>
-                    <td style={s.td}>
-                      <div>
-                        <div style={s.userName}>{e.organisateur}</div>
-                        <div style={s.email}>{e.organisateur_email}</div>
-                      </div>
+                      <div style={s.userName}>{e.organisateur}</div>
+                      <div style={s.email}>{e.organisateur_email}</div>
                     </td>
                     <td style={s.td}><span style={s.meta}>{e.ville || "—"}</span></td>
                     <td style={s.td}><span style={s.meta}>{formatDate(e.date_evenement)}</span></td>
@@ -314,12 +336,8 @@ export default function Admin({ token }) {
                     </td>
                     <td style={s.td}>
                       <div style={s.actions}>
-                        <button style={s.roleBtn} onClick={() => setEvenementActif(e)}>
-                          👥
-                        </button>
-                        <button style={s.deleteBtn} onClick={() => supprimerEvenement(e.id)}>
-                          🗑️
-                        </button>
+                        <button style={s.roleBtn} onClick={() => setEvenementActif(e)}>👥</button>
+                        <button style={s.deleteBtn} onClick={() => supprimerEvenement(e.id)}>🗑️</button>
                       </div>
                     </td>
                   </tr>
@@ -327,6 +345,86 @@ export default function Admin({ token }) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Groupes */}
+      {onglet === "groupes" && (
+        <div style={s.card}>
+          <h3 style={s.cardTitle}>👥 Tous les groupes ({groupes.length})</h3>
+          <div style={s.tableWrapper}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {["Sport", "Nom", "Créateur", "Ville", "Membres", "Privé", "Créé le", "Actions"].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {groupes.map(g => (
+                  <tr key={g.id} style={s.tr}>
+                    <td style={s.td}><span style={s.sportIcon}>{g.sport_icone} {g.sport_nom}</span></td>
+                    <td style={s.td}><div style={s.userName}>{g.nom}</div></td>
+                    <td style={s.td}>
+                      <div style={s.userName}>{g.createur}</div>
+                      <div style={s.email}>{g.createur_email}</div>
+                    </td>
+                    <td style={s.td}><span style={s.meta}>{g.ville || "—"}</span></td>
+                    <td style={s.td}><span style={s.meta}>{g.nb_membres}</span></td>
+                    <td style={s.td}>
+                      <span style={g.prive ? s.adminBadge : s.userBadge}>
+                        {g.prive ? "🔒 Privé" : "🌍 Public"}
+                      </span>
+                    </td>
+                    <td style={s.td}><span style={s.meta}>{formatDate(g.created_at)}</span></td>
+                    <td style={s.td}>
+                      <button style={s.deleteBtn} onClick={() => supprimerGroupe(g.id)}>🗑️</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Logs */}
+      {onglet === "logs" && (
+        <div style={s.card}>
+          <div style={s.logsHeader}>
+            <h3 style={s.cardTitle}>🔍 Audit Logs ({logsFiltres.length})</h3>
+            <input style={s.logsSearch}
+              placeholder="Filtrer par action, email, détail..."
+              value={logsFilter}
+              onChange={e => setLogsFilter(e.target.value)} />
+          </div>
+          {logsFiltres.length === 0 ? (
+            <p style={s.emptyText}>Aucun log trouvé</p>
+          ) : (
+            <div style={s.logsList}>
+              {logsFiltres.map(log => {
+                const colors = actionColors[log.action] || { bg: "rgba(255,255,255,0.05)", color: "var(--text2)" };
+                return (
+                  <div key={log.id} style={s.logItem}>
+                    <div style={s.logLeft}>
+                      <span style={{...s.logAction, background: colors.bg, color: colors.color}}>
+                        {log.action}
+                      </span>
+                      <span style={s.logDetails}>{log.details || "—"}</span>
+                    </div>
+                    <div style={s.logRight}>
+                      <span style={s.logUser}>
+                        {log.prenom ? `${log.prenom} ${log.nom}` : "Compte supprimé"}
+                      </span>
+                      <span style={s.logEmail}>{log.email || "—"}</span>
+                      <span style={s.logDate}>{formatDatetime(log.created_at)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -350,7 +448,7 @@ const s = {
   tabs: {
     display: "flex", gap: "0.5rem", marginBottom: "2rem",
     background: "var(--dark3)", borderRadius: "12px", padding: "4px",
-    width: "fit-content",
+    flexWrap: "wrap",
   },
   tab: {
     padding: "0.6rem 1.25rem", border: "none", background: "transparent",
@@ -451,4 +549,32 @@ const s = {
   },
   emptyText: { color: "var(--text2)", fontSize: "0.9rem" },
   sportIcon: { color: "white", fontSize: "0.85rem" },
+  // Logs
+  logsHeader: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    gap: "1rem", marginBottom: "1.25rem", flexWrap: "wrap",
+  },
+  logsSearch: {
+    padding: "0.65rem 1rem", background: "var(--dark4)",
+    border: "2px solid transparent", borderRadius: "10px",
+    color: "white", fontSize: "0.85rem", outline: "none",
+    width: "280px",
+  },
+  logsList: { display: "flex", flexDirection: "column", gap: "0.5rem" },
+  logItem: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    gap: "1rem", padding: "0.75rem 1rem",
+    background: "var(--dark4)", borderRadius: "10px",
+    border: "1px solid rgba(255,255,255,0.03)", flexWrap: "wrap",
+  },
+  logLeft: { display: "flex", alignItems: "center", gap: "0.75rem", flex: 1 },
+  logAction: {
+    padding: "0.2rem 0.6rem", borderRadius: "6px",
+    fontSize: "0.72rem", fontWeight: "700", whiteSpace: "nowrap",
+  },
+  logDetails: { color: "var(--text2)", fontSize: "0.82rem" },
+  logRight: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.1rem" },
+  logUser: { color: "white", fontWeight: "600", fontSize: "0.82rem" },
+  logEmail: { color: "var(--text2)", fontSize: "0.75rem" },
+  logDate: { color: "var(--text2)", fontSize: "0.72rem" },
 };
