@@ -85,9 +85,10 @@ export function useWebSocket(token, onMessage) {
       };
     }
 
-    connect();
+    const initTimer = setTimeout(connect, 500);
 
     return () => {
+      clearTimeout(initTimer);
       cancelled = true;
       cleanup();
       setConnected(false);
