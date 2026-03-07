@@ -11,5 +11,10 @@ export default defineConfig({
       '192.168.1.184',
       'sportconnect.duckdns.org',
     ],
+    hmr: {
+      host: 'sportconnect.duckdns.org',
+      protocol: 'wss',
+      clientPort: 443,
+    },
   },
 })

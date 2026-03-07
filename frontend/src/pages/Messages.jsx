@@ -7,17 +7,14 @@ export default function Messages({ token, userId, initialUser }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const [wsConnected, setWsConnected] = useState(false);
   const messagesEndRef = useRef(null);
   const isMobile = window.innerWidth <= 768;
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
-  // Gestion des messages WebSocket entrants
   const handleWsMessage = useCallback((data) => {
     if (data.type === "message") {
       setMessages(prev => {
-        // Évite les doublons
         if (prev.find(m => m.id === data.id)) return prev;
         return [...prev, data];
       });
@@ -29,10 +26,9 @@ export default function Messages({ token, userId, initialUser }) {
       }));
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
-    if (data.type === "auth_ok") setWsConnected(true);
   }, []);
 
-  const { sendMessage: wsSend } = useWebSocket(token, handleWsMessage);
+  const { sendMessage: wsSend, connected: wsConnected } = useWebSocket(token, handleWsMessage);
 
   useEffect(() => {
     fetchConversations();
@@ -68,14 +64,12 @@ export default function Messages({ token, userId, initialUser }) {
     const contenu = newMessage.trim();
     setNewMessage("");
 
-    // Envoie via WebSocket
     const sent = wsSend({
       type: "message",
       destinataire_id: convActuelle.other_user,
       contenu,
     });
 
-    // Fallback HTTP si WS pas connecté
     if (!sent) {
       await fetch(`/api/messages/${convActuelle.other_user}`, {
         method: "POST", headers, body: JSON.stringify({ contenu }),
@@ -96,7 +90,6 @@ export default function Messages({ token, userId, initialUser }) {
     return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
   }
 
-  // Vue chat
   if (convActuelle) {
     return (
       <div style={isMobile ? s.chatPageMobile : s.chatPage}>
@@ -168,7 +161,6 @@ export default function Messages({ token, userId, initialUser }) {
     );
   }
 
-  // Vue liste conversations
   return (
     <div style={s.container} className="fade-in">
       <div style={s.pageHeader}>
